@@ -11,6 +11,10 @@ This makes it useful for a range of research areas, including demand-side flexib
 
 The goal is to give researchers a realistic, configurable data centre load that slots into their own models rather than having to build one from scratch.
 
+## Example Output
+
+![Edinburgh 2024 — Annual Data Centre Energy Profile](dc_profiles_edinburgh_2024_1h.png)
+
 ## Features
 
 - Physics-based IT load modelling (daily/weekly patterns)
