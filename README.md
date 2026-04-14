@@ -5,9 +5,8 @@ simulation for district heating integration studies.
 
 ## What It Does
 
-Simulates hourly power consumption and recoverable waste heat 
-for data centres across 24 global locations. Built for 
-Virtual Heat Plant research.
+Simulates hourly or half-hourly power consumption and recoverable waste heat for data centres. 
+Built for Virtual Heat Plant and demand-side management research.
 
 ## Features
 
@@ -15,7 +14,6 @@ Virtual Heat Plant research.
 - Temperature-dependent cooling calculations
 - Dynamic PUE (Power Usage Effectiveness) analysis
 - Waste heat quantification for district heating
-- 24 global climate locations
 
 ## Installation
 
@@ -29,10 +27,6 @@ dc = DataCenterModel(it_capacity_kw=500, pue=1.4, location='London')
 df = dc.simulate(hours=8760)
 dc.print_summary(df)
 
-## Available Locations
-
-Edinburgh, London, Philadelphia, Pennsylvania, Cambridge MA, 
-New York, Phoenix, Singapore, Tokyo... and 15 more.
 
 ## Requirements
 
