@@ -1,10 +1,15 @@
 # Datacentre Energy Modelling
 
-Physics-based data centre energy consumption and waste heat simulation for district heating integration studies.
+An open-source physics-based tool for simulating data centre power consumption and waste heat generation, developed as part of Virtual Heat Plant research at the University of Edinburgh.
 
 ## What It Does
 
-Simulates hourly or half-hourly power consumption and recoverable waste heat for data centres. Built for Virtual Heat Plant and demand-side management research.
+Generates realistic hourly or half-hourly data centre load profiles that can be directly plugged into energy system models, grid simulators, and local area energy planning frameworks without requiring access to proprietary operational data.
+
+The tool is built around the idea that data centres are not just large electricity consumers but also potential heat sources that can play an active role in local energy systems. Waste heat from data centres can offset gas boiler operation in district heating networks, and when combined with signals from renewable energy availability, electricity prices, and carbon emissions, the load profiles can inform smarter switching strategies across heating and power networks.
+This makes it useful for a range of research areas, including demand-side flexibility, multi-vector energy network modelling, sector coupling between power and heat, and local authority energy planning, where data centre growth needs to be factored into long-term infrastructure decisions. The domestic heating sector is also in scope, where flexibility from heat pumps and thermal storage can be coordinated alongside data centre waste heat to reduce peak grid demand and carbon emissions.
+
+The goal is to give researchers a realistic, configurable data centre load that slots into their own models rather than having to build one from scratch.
 
 ## Features
 
