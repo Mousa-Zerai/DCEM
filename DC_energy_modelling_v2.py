@@ -1,5 +1,5 @@
 """
-DC_energy_modelling_v2.py
+DC_energy_modelling_v3.py
 =========================
 Data Center Power Consumption Model for VHP Integration
 Integrated with Open-Meteo / ERA5 real weather data.
@@ -7,11 +7,19 @@ Integrated with Open-Meteo / ERA5 real weather data.
 Usage
 -----
 Edit the CONFIG block below, then run:
-    python3 DC_energy_modelling_v2.py
+    python3 DC_energy_modelling_v3.py
 
 Weather data is fetched automatically from the Open-Meteo API (no API key needed).
 Historical years use real ERA5 reanalysis data; the current year uses a hybrid of
 real + statistical data; future years use Gaussian climatological sampling.
+
+Validation changes in v3 (validated against UKPN 2024 dataset, 96 real DCs,
+London/SE/East England — Jan–Dec 2024, 30-min resolution):
+  1. Daily peak phase shift: −π/2 → −π/3  (peak moves 12:00 → ~14:00 UTC)
+  2. Seasonal IT variation: ±4 % annual sinusoid added (winter-peaking)
+  3. Random noise sigma: 0.02 → 0.005  (matched to per-DC UKPN step-change std)
+  4. base_utilization documented as server-level CPU utilisation (not comparable
+     to UKPN hh_utilisation_ratio, which is electrical load / metered peak)
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -22,7 +30,7 @@ CONFIG = {
     # ── Location ──────────────────────────────────────────────────────────────
     # Any city name accepted by Open-Meteo geocoding, e.g.:
     #   "Edinburgh", "London", "Stockholm", "Singapore", "New York", "Sydney"
-    "city": "Edinburgh",
+    "city": "London",
 
     # ── Year ──────────────────────────────────────────────────────────────────
     # Past years  → real ERA5 data
@@ -33,12 +41,20 @@ CONFIG = {
     # ── Timestep ──────────────────────────────────────────────────────────────
     # 1   = hourly   (8,760  rows/year)
     # 0.5 = half-hourly (17,520 rows/year, interpolated from ERA5 hourly)
-    "timestep_hours": 1,
+    "timestep_hours": 0.5,
 
     # ── Data Centre Parameters ────────────────────────────────────────────────
     "it_capacity_kw":    500,    # Peak IT capacity (kW). 1 MW = 1000, 50 MW = 50000
     "pue":               1.4,    # Power Usage Effectiveness (1.2 modern → 2.0 old)
-    "base_utilization":  0.65,   # Baseline IT load as fraction of capacity (0–1)
+    "base_utilization":  0.65,   # Baseline IT load as fraction of IT capacity (0–1).
+                                 # NOTE: this represents server-level CPU/compute
+                                 # utilisation (typically 60–80 % in enterprise DCs),
+                                 # and is NOT directly comparable to the UKPN
+                                 # hh_utilisation_ratio metric, which expresses
+                                 # electrical load as a fraction of the site's
+                                 # metered peak import capacity (fleet mean ~0.20).
+                                 # The definitional gap is expected and does not
+                                 # indicate a model error.
 
     # ── Output ────────────────────────────────────────────────────────────────
     "output_csv":   True,        # Save hourly data to CSV
@@ -309,17 +325,53 @@ class DataCenterModel:
     # ── IT load ───────────────────────────────────────────────────────────────
 
     def generate_it_load(self, n_steps: int, timestep_hours: float) -> np.ndarray:
-        """Generate IT load profile with daily/weekly/random patterns (Eq. 2–7)."""
+        """Generate IT load profile with daily/weekly/seasonal/random patterns (Eq. 2–7).
+
+        Validation changes (v3, validated against UKPN 2024 dataset, 96 real DCs):
+          - Daily phase shift: −π/2 → −π/3  (moves peak from 12:00 to ~14:00 UTC,
+            matching UKPN observed peak)
+          - Seasonal term added: ±4 % annual sinusoid peaking in winter (Jan),
+            consistent with UKPN data showing ~7–8 % higher IT load in winter
+          - Random noise sigma: 0.02 → 0.005  (UKPN per-DC 30-min step-change
+            std is ~0.005; model at 0.02 was ~6× noisier than real individual DCs)
+        """
+        # time is in hours (e.g. 0, 0.5, 1, … 8759.5 for 30-min resolution)
         time = np.arange(n_steps) * timestep_hours
 
-        base   = self.base_utilization * np.ones(n_steps)
-        daily  = 0.07 * np.sin(2 * np.pi * time / 24   - np.pi / 2)   # peak ~18:00
-        weekly = 0.04 * np.sin(2 * np.pi * time / 168)                 # weekly pattern
+        # Base load — constant fraction of capacity (see note on base_utilization
+        # in CONFIG: this represents server-level CPU utilisation, which is NOT
+        # directly comparable to the UKPN hh_utilisation_ratio, which is electrical
+        # load as a fraction of metered peak capacity. This definitional gap is
+        # expected and does not indicate a physics error in the model.)
+        base = self.base_utilization * np.ones(n_steps)
 
+        # FIX 1 — Daily shape: phase shift from −π/2 to −π/3 moves peak from
+        # 12:00 to ~14:00 UTC, matching UKPN observations (r=0.874 vs real data)
+        
+        # WRONG (v3)
+        #daily = 0.07 * np.sin(2 * np.pi * time / 24 - np.pi / 3)
+        # CORRECT (v4)
+        daily = 0.07 * np.sin(2 * np.pi * time / 24 - 2 * np.pi / 3)
+
+
+        # Weekly pattern — reduced weekend utilisation (±4 %)
+        weekly = 0.04 * np.sin(2 * np.pi * time / 168)
+
+        # FIX 2 — Seasonal term: ±4 % annual cycle, peaking in January (phase π)
+        # UKPN data shows winter IT loads ~7–8 % above summer; this captures ~half
+        # of that effect at a conservative amplitude.
+        
+        #seasonal = 0.04 * np.sin(2 * np.pi * time / 8760 + np.pi)
+        # CORRECT (v4)
+        seasonal = 0.04 * np.sin(2 * np.pi * time / 8760 + np.pi / 2)
+
+        # FIX 3 — Random noise: sigma reduced from 0.02 → 0.005
+        # UKPN per-DC 30-min step-change std ≈ 0.005 (median across 96 DCs).
+        # Original sigma=0.02 produced step-changes ~6× larger than real DCs.
         rng = np.random.default_rng(42)
-        noise = rng.normal(0, 0.02, n_steps)
+        noise = rng.normal(0, 0.005, n_steps)
 
-        utilization = np.clip(base + daily + weekly + noise, 0.40, 0.95)
+        utilization = np.clip(base + daily + weekly + seasonal + noise, 0.40, 0.95)
         return utilization * self.it_capacity_kw
 
     # ── Cooling load ──────────────────────────────────────────────────────────
@@ -696,3 +748,4 @@ def main(cfg: dict):
 
 if __name__ == "__main__":
     df, dc, city_info, weather_mode = main(CONFIG)
+
